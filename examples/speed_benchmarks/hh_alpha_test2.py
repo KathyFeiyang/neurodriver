@@ -3,7 +3,6 @@ import time
 import argparse
 import itertools
 import networkx as nx
-import pycuda.driver as cuda
 from neurokernel.tools.logging import setup_logger
 import neurokernel.core_gpu as core
 
@@ -16,7 +15,7 @@ from neurokernel.LPU.OutputProcessors.OutputRecorder import OutputRecorder
 
 import neurokernel.mpi_relaunch
 
-dt = 1e-5
+dt = 1e-3
 dur = 1.0
 steps = int(dur/dt)
 
@@ -44,22 +43,53 @@ man = core.Manager()
 
 G = nx.MultiDiGraph()
 
-N = 1024
+N = 32
+
+# Create N HodgkinHuxley2 neurons
 for i in range(N):
-    G.add_node('neuron{}'.format(i), **{
-               'class': 'LeakyIAF',
-               'name': 'LeakyIAF',
-               'resting_potential': -70.0, # (mV)
-              'threshold': -40.0, # Firing Threshold (mV)
-              'reset_potential': -70.0, # Potential to be reset to after a spike (mV)
-              'capacitance': 1, # (\mu F/cm^2)
-              'resistance': 0.007 # (k\Omega cm.^2)
-               })
+    id = 'neuron_{}'.format(i)
 
-comp_dict, conns = LPU.graph_to_dicts(G)
+    G.add_node(id,
+               **{'class': 'HodgkinHuxley2',
+                  'name': 'HodgkinHuxley2',
+                  'g_K': 36.0,
+                  'g_Na': 120.0,
+                  'g_L': 0.3,
+                  'E_K': -77.0,
+                  'E_Na': 50.0,
+                  'E_L': -54.387
+                  })
 
+spk_out_id = 0
+in_port_idx = 0
 
-fl_input_processor = StepInputProcessor('I', ['neuron{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
+# Create AlphaSynapse connection between each pair of HodgkinHuxley neurons
+for i in range(N):
+    for j in range(N):
+        if i == j:
+            continue
+
+        id_i = 'neuron_{}'.format(i)
+        id_j = 'neuron_{}'.format(j)
+        pair_id = id_i + '_to_' + id_j
+
+        synapse_id = 'synapse_' + pair_id
+
+        G.add_node(synapse_id,
+                   **{'class': 'AlphaSynapse',
+                      'name': pair_id,
+                      'ar': 0.11,
+                      'ad': 1.9,
+                      'reverse': 10.0,
+                      'gmax': 3.1e-4,
+                      'circuit': 'local'})
+
+        G.add_edge(id_i, synapse_id)
+        G.add_edge(synapse_id, id_j)
+
+comp_dict, conns = LPU.graph_to_dicts(G, remove_edge_id = True)
+
+fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
 fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'output.h5', sample_interval=1)]
 
 #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
@@ -67,7 +97,7 @@ fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)],
 man.add(LPU, 'ge', dt, comp_dict, conns,
         device=args.gpu_dev, input_processors=[fl_input_processor],
         output_processors=fl_output_processor, debug=args.debug,
-        time_sync = False, print_timing = True,
+        print_timing = True, time_sync = False,
         extra_comps=[])
 
 man.spawn()
@@ -76,3 +106,4 @@ start_time = time.time()
 man.wait()
 end_time = time.time()
 print(end_time-start_time)
+

@@ -3,7 +3,6 @@ import time
 import argparse
 import itertools
 import networkx as nx
-import pycuda.driver as cuda
 from neurokernel.tools.logging import setup_logger
 import neurokernel.core_gpu as core
 
@@ -47,13 +46,16 @@ G = nx.MultiDiGraph()
 N = 1024
 for i in range(N):
     G.add_node('neuron{}'.format(i), **{
-               'class': 'LeakyIAF',
-               'name': 'LeakyIAF',
-               'resting_potential': -70.0, # (mV)
-              'threshold': -40.0, # Firing Threshold (mV)
-              'reset_potential': -70.0, # Potential to be reset to after a spike (mV)
-              'capacitance': 1, # (\mu F/cm^2)
-              'resistance': 0.007 # (k\Omega cm.^2)
+               'class': 'ConnorStevens2',
+               'name': 'ConnorStevens2',
+               'g_K': 20.0,
+               'g_Na': 120.0,
+               'g_l': 0.3,
+               'g_a': 47.7,
+               'E_K': -72.0,
+               'E_Na': 53.0,
+               'E_l': -17.0,
+               'E_a': -75.0
                })
 
 comp_dict, conns = LPU.graph_to_dicts(G)
@@ -67,7 +69,7 @@ fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)],
 man.add(LPU, 'ge', dt, comp_dict, conns,
         device=args.gpu_dev, input_processors=[fl_input_processor],
         output_processors=fl_output_processor, debug=args.debug,
-        time_sync = False, print_timing = True,
+        print_timing = True, time_sync = False,
         extra_comps=[])
 
 man.spawn()
