@@ -12,8 +12,7 @@ class HodgkinHuxley2(BaseAxonHillockModel):
               'E_Na',
               'E_L'
               ]
-    internals = OrderedDict([('internalV',-65.),       # Membrane Potential (mV)
-                             ('internalVprev1',-65.),  # Membrane Potential (mV)
+    internals = OrderedDict([('internalVprev1',-65.),  # Membrane Potential (mV)
                              ('internalVprev2',-65.),
                              ('n', 0.),
                              ('m', 0.),
@@ -23,7 +22,7 @@ class HodgkinHuxley2(BaseAxonHillockModel):
         template = """
 #define EXP exp%(fletter)s
 #define POW pow%(fletter)s
-#define ABS fabs%(fletter)s
+#define LOG log%(fletter)s
 
 __global__ void update(
     int num_comps,
@@ -36,7 +35,6 @@ __global__ void update(
     %(E_K)s* g_E_K,
     %(E_Na)s* g_E_Na,
     %(E_L)s* g_E_L,
-    %(internalV)s* g_internalV,
     %(internalVprev1)s* g_internalVprev1,
     %(internalVprev2)s* g_internalVprev2,
     %(n)s* g_n,
@@ -48,78 +46,72 @@ __global__ void update(
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
-
-    %(V)s V, Vprev1, Vprev2, dV;
-    %(I)s I;
+    %(dt)s ddt = dt * 1000.; // s to ms
+    
+    %(V)s V, Vprev1, Vprev2;
+    %(m)s m, a_m, b_m;
+    %(n)s n, a_n, b_n;
+    %(h)s h, a_h, b_h;
+    %(I)s I, I_K, I_Na, I_L, I_channels;
     %(spike_state)s spike;
+    %(E_Na)s E_Na;
+    %(E_K)s E_K;
+    %(E_L)s E_L;
     %(g_Na)s g_Na;
     %(g_K)s g_K;
     %(g_L)s g_L;
 
-    %(E_Na)s E_Na;
-    %(E_K)s E_K;
-    %(E_L)s E_L;
-
-    %(n)s n, dn;
-    %(m)s m, dm;
-    %(h)s h, dh;
-    %(n)s a;
-
     for(int i = tid; i < num_comps; i += total_threads)
     {
-        spike = 0;
-        V = g_internalV[i];
+        V = g_V[i];
         Vprev1 = g_internalVprev1[i];
         Vprev2 = g_internalVprev2[i];
+        m = g_m[i]
+        n = g_n[i]
+        h = g_h[i]
         I = g_I[i];
-        n = g_n[i];
-        m = g_m[i];
-        h = g_h[i];
-        g_Na = g_g_Na[i];
-        g_K = g_g_K[i];
-        g_L = g_g_L[i];
+        spike = 0;
         E_Na = g_E_Na[i];
         E_K = g_E_K[i];
         E_L = g_E_L[i];
+        g_Na = g_g_Na[i];
+        g_K = g_g_K[i];
+        g_L = g_g_L[i];
 
         for (int j = 0; j < nsteps; ++j)
         {
-            a = exp(-(V+55)/10)-1;
-            if (ABS(a) <= 1e-7)
-                dn = (1.-n) * 0.1 - n * (0.125*EXP(-(V+65.)/80.));
-            else
-                dn = (1.-n) * (-0.01*(V+55.)/a) - n * (0.125*EXP(-(V+65)/80));
-
-            a = exp(-(V+40.)/10.)-1.;
-            if (ABS(a) <= 1e-7)
-                dm = (1.-m) - m*(4*EXP(-(V+65)/18));
-            else
-                dm = (1.-m) * (-0.1*(V+40.)/a) - m * (4.*EXP(-(V+65.)/18.));
-
-            dh = (1.-h) * (0.07*EXP(-(V+65.)/20.)) - h / (EXP(-(V+35.)/10.)+1.);
-
-            dV = I - g_Na*POW(m,3)*h*(V-E_Na) - g_K * POW(n,4) * (V-E_K) - g_L * (V-E_L);
-
-            n += ddt * dn;
-            m += ddt * dm;
-            h += ddt * dh;
-            V += ddt * dV;
-
-            spike += (Vprev2<=Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);
-
             Vprev2 = Vprev1;
             Vprev1 = V;
-        }
+            
+            a_m = (25.0 - V) / (10.0 * (EXP((25.0 - V) / 10.0) - 1.0));
+            a_n = (10.0 - V) / (100.0 * (EXP((10.0 - V) / 10.0) - 1.0));
+            a_h = 0.07 * EXP(-V / 20.0);
 
-        g_n[i] = n;
-        g_m[i] = m;
-        g_h[i] = h;
+            b_m = 4.0 * EXP(-1.0 * V / 18.0);
+            b_n = 0.125 * EXP(-1.0 * V / 80.0);
+            b_h = 1.0 / (EXP((30.0 - V) / 10.0) + 1.0);
+            
+            m = m + dt * (a_m * (1.0 - m) - b_m * m);
+            n = n + dt * (a_n * (1.0 - n) - b_n * n);
+            h = h + dt * (a_h * (1.0 - h) - b_h * h);
+            
+            I_K = g_K * EXP(4 * LOG(n)) * (V - E_K);
+            I_Na = g_Na * EXP(3 * LOG(m)) * h * (V - E_Na);
+            I_l = g_L * (V - E_L);
+            I_channels = I_K + I_Na + I_L;
+            
+            V = V + dt * (I - I_channels);
+            
+            spike += (Vprev2 <= Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);   
+        }
+        
         g_V[i] = V;
-        g_internalV[i] = V;
         g_internalVprev1[i] = Vprev1;
         g_internalVprev2[i] = Vprev2;
-        g_spike_state[i] = (spike > 0);
+        g_m[i] = m;
+        g_n[i] = n;
+        g_h[i] = h;
+        g_spike_state[i] = (spike > 0);       
     }
 }
 """

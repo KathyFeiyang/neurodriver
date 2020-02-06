@@ -78,10 +78,10 @@ for i in range(N):
         G.add_node(synapse_id,
                    **{'class': 'AlphaSynapse',
                       'name': pair_id,
-                      'ar': 0.11,
-                      'ad': 1.9,
-                      'reverse': 10.0,
-                      'gmax': 3.1e-4,
+                      'ar': 4.0,
+                      'ad': 4.0,
+                      'V_reverse': 100.0,
+                      'gmax': 100.0,
                       'circuit': 'local'})
 
         G.add_edge(id_i, synapse_id)

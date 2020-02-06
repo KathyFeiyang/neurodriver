@@ -2,10 +2,11 @@ from neurokernel.LPU.NDComponents.SynapseModels.BaseSynapseModel import *
 
 class AlphaSynapse(BaseSynapseModel):
     accesses = ['spike_state'] # (bool)
-    updates = ['g'] # conductance (mS/cm^2)
+    updates = ['g', 'E'] # conductance (mS/cm^2)
     params = ['gmax', # maximum conductance (mS/cm^2)
               'ar', # rise rate of conductance (ms)
-              'ad' # decay rate of conductance (ms)
+              'ad', # decay rate of conductance (ms)
+              'V_reverse'
               ]
     internals = OrderedDict([('z', 0.0),  # g,
                              ('dz', 0.0),  # derivative of g
@@ -19,43 +20,56 @@ class AlphaSynapse(BaseSynapseModel):
             template = """
 __global__ void update(int num_comps, %(dt)s dt, int nsteps,
                        %(spike_state)s* g_spike_state,
-                       %(gmax)s* g_gmax, %(ar)s* g_ar,
+                       %(gmax)s* g_gmax, 
+                       %(ar)s* g_ar,
                        %(ad)s* g_ad,
-                       %(z)s* g_z, %(dz)s* g_dz,
-                       %(d2z)s* g_d2z, %(g)s* g_g)
+                       %(V_reverse)* g_V_reverse,
+                       %(z)s* g_z, 
+                       %(dz)s* g_dz,
+                       %(d2z)s* g_d2z, 
+                       %(g)s* g_g,
+                       %(E)s* g_E)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
+    %(dt)s ddt = dt * 1000.; // s to ms
     %(spike_state)s spike_state;
     %(gmax)s gmax;
     %(ar)s ar;
     %(ad)s ad;
+    %(V_reverse)* V_reverse;
     %(z)s z, new_z;
     %(dz)s dz, new_dz;
     %(d2z)s d2z, new_d2z;
+    %(g)s g;
+    %(E)s E;
 
     for(int i = tid; i < num_comps; i += total_threads)
     {
         ar = g_ar[i];
         ad = g_ad[i];
+        g_max = g_gmax[i];
+        V_reverse = g_V_reverse[i];
+        spike_state = g_spike_state[i];
         z = g_z[i];
         dz = g_dz[i];
         d2z = g_d2z[i];
-        spike_state = g_spike_state[i];
+        g = g_g[i];
+        E = g_E[i];
 
-        new_z = fmax( 0., z + ddt*dz );
-        new_dz = dz + ddt*d2z;
-        if( spike_state>0.0 )
-            new_dz += ar*ad;
-        new_d2z = -( ar+ad )*dz - ar*ad*z;
-
-        gmax = g_gmax[i];
+        new_z = fmax(0., z + dt * dz);
+        new_dz = dz + dt * d2z;
+        if(spike_state > 0.0)
+            new_dz += ar * ad;
+        new_d2z = -(ar + ad) * dz - ar * ad * z;
+        g = fmin(gmax, gmax * new_z);
+        
         g_z[i] = new_z;
         g_dz[i] = new_dz;
-        g_d2z[i] = new_d2z;
-        g_g[i] = new_z*gmax;
+        g_d2z[i] = new_d2z;  
+        g_g[i] = g;
+        g_E[i] = V_reverse;
     }
 }
 """
@@ -65,50 +79,63 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
             template = """
 __global__ void update(int num_comps, %(dt)s dt, int nsteps,
                        %(spike_state)s* g_spike_state,
-                       %(gmax)s* g_gmax, %(ar)s* g_ar,
+                       %(gmax)s* g_gmax, 
+                       %(ar)s* g_ar,
                        %(ad)s* g_ad,
-                       %(z)s* g_z, %(dz)s* g_dz,
-                       %(d2z)s* g_d2z, %(g)s* g_g)
+                       %(V_reverse)* g_V_reverse,
+                       %(z)s* g_z, 
+                       %(dz)s* g_dz,
+                       %(d2z)s* g_d2z, 
+                       %(g)s* g_g,
+                       %(E)s* g_E)
 {
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
+    %(dt)s ddt = dt * 1000.; // s to ms
     %(spike_state)s spike_state;
     %(gmax)s gmax;
     %(ar)s ar;
     %(ad)s ad;
+    %(V_reverse)* V_reverse;
     %(z)s z, new_z;
     %(dz)s dz, new_dz;
     %(d2z)s d2z, new_d2z;
+    %(g)s g;
+    %(E)s E;
 
     for(int i = tid; i < num_comps; i += total_threads)
     {
         ar = g_ar[i];
         ad = g_ad[i];
+        g_max = g_gmax[i];
+        V_reverse = g_V_reverse[i];
+        spike_state = g_spike_state[i];
         z = g_z[i];
         dz = g_dz[i];
         d2z = g_d2z[i];
-        spike_state = g_spike_state[i];
+        g = g_g[i];
+        E = g_E[i];
 
         for(int k = 0; k < nsteps; ++k)
         {
-            new_z = fmax( 0., z + ddt*dz );
-            new_dz = dz + ddt*d2z;
-            if(k == 0 && (spike_state>0.0))
-                new_dz += ar*ad;
-            new_d2z = -( ar+ad )*dz - ar*ad*z;
+            new_z = fmax(0., z + dt * dz);
+            new_dz = dz + dt * d2z;
+            if(k == 0 && spike_state > 0.0)
+                new_dz += ar * ad;
+            new_d2z = -(ar + ad) * dz - ar * ad * z;
+            g = fmin(gmax, gmax * new_z);
 
             z = new_z;
             dz = new_dz;
             d2z = new_d2z;
         }
-
-        gmax = g_gmax[i];
+        
         g_z[i] = new_z;
         g_dz[i] = new_dz;
-        g_d2z[i] = new_d2z;
-        g_g[i] = new_z*gmax;
+        g_d2z[i] = new_d2z;  
+        g_g[i] = g;
+        g_E[i] = V_reverse;
     }
 }
 """
