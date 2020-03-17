@@ -36,9 +36,11 @@ class BaseAxonHillockModel(with_metaclass(ABCMeta, NDComponent)):
         self.dtype = params_dict[self.params[0]].dtype
 
         self.dt = np.double(dt)
-        self.ddt = np.double(1e-3)
-        self.steps = np.int32(max( int(self.dt/self.ddt), 1))
-
+        self.ddt = np.double(1e-6)
+        self.steps = np.int32(max(int(self.dt/self.ddt), 1))
+        print('DEBUG: dt={}, ddt={}'.format(self.dt, self.ddt))
+        print('DEBUG: self.steps={}'.format(self.steps))
+        # import pdb; pdb.set_trace()
         self.internal_states = {
             c: garray.zeros(self.num_comps, dtype = self.dtype)+self.internals[c] \
             for c in self.internals}
@@ -83,6 +85,13 @@ class BaseAxonHillockModel(with_metaclass(ABCMeta, NDComponent)):
     def get_update_func(self, dtypes):
         type_dict = {k: dtype_to_ctype(dtypes[k]) for k in dtypes}
         type_dict.update({'fletter': 'f' if type_dict[self.params[0]] == 'float' else ''})
+
+        # print(type_dict)
+        # type_dict = {'dt': 'float', 'I': 'float', 'g_K': 'float', 'g_Na': 'float', 'g_L': 'float', 'E_K': 'float', 'E_Na':
+        # 'float', 'E_L': 'float', 'internalVprev1': 'float', 'internalVprev2': 'float', 
+        # 'n': 'float', 'm': 'float', 'h': 'float','spike_state': 'float', 'V':'float', 'fletter': 'f'} 
+        # print("debug: ", type_dict[self.params[0]] == 'float')
+        
         mod = SourceModule(self.get_update_template() % type_dict,
                            options=self.compile_options)
         func = mod.get_function("update")

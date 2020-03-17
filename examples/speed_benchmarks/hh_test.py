@@ -15,7 +15,7 @@ from neurokernel.LPU.OutputProcessors.OutputRecorder import OutputRecorder
 
 import neurokernel.mpi_relaunch
 
-dt = 1e-5
+dt = 1e-3
 dur = 1.0
 steps = int(dur/dt)
 
@@ -43,7 +43,7 @@ man = core.Manager()
 
 G = nx.MultiDiGraph()
 
-N = 1024
+N = 1
 for i in range(N):
     G.add_node('neuron{}'.format(i), **{
                'class': 'HodgkinHuxley2',
@@ -53,14 +53,19 @@ for i in range(N):
                'g_L': 0.3,
                'E_K': -77.0,
                'E_Na': 50.0,
-               'E_L': -54.387
+               'E_L': -54.387,
+               'V': 0.0,
+               'spike': 0.0,
+               'n': 0.0,
+               'm': 0.0,
+               'h': 0.92
                })
 
 comp_dict, conns = LPU.graph_to_dicts(G)
 
 
 fl_input_processor = StepInputProcessor('I', ['neuron{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
-fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'output.h5', sample_interval=1)]
+fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None), ('n', None), ('m', None), ('h', None)], 'hh_test_output.h5', sample_interval=1, cache_length=2000)]
 
 #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
 

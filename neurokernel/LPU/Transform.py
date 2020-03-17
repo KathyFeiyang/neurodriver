@@ -30,7 +30,7 @@ class Transform(Object):
 
     @variable_name.setter
     def variable_name(self, value):
-        assert(self.LPU_obj.is_variable(value)):
+        assert(self.LPU_obj.is_variable(value))
         self ._variable_name = value
 
     @property

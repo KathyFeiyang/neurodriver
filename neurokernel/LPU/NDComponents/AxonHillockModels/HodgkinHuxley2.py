@@ -12,17 +12,18 @@ class HodgkinHuxley2(BaseAxonHillockModel):
               'E_Na',
               'E_L'
               ]
-    internals = OrderedDict([('internalVprev1',-65.),  # Membrane Potential (mV)
+    internals = OrderedDict([('internalVprev1', 0.),  # Membrane Potential (mV)
                              ('internalVprev2',-65.),
                              ('n', 0.),
                              ('m', 0.),
-                             ('h', 0.92)]) # Membrane Potential (mV)
+                             ('h', 0.92)])  # Membrane Potential (mV)]) 
 
     def get_update_template(self):
         template = """
 #define EXP exp%(fletter)s
 #define POW pow%(fletter)s
 #define LOG log%(fletter)s
+#include <stdio.h>
 
 __global__ void update(
     int num_comps,
@@ -46,7 +47,7 @@ __global__ void update(
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt * 1000.; // s to ms
+    // %(dt)s ddt = dt * 1000.; // s to ms
     
     %(V)s V, Vprev1, Vprev2;
     %(m)s m, a_m, b_m;
@@ -63,12 +64,12 @@ __global__ void update(
 
     for(int i = tid; i < num_comps; i += total_threads)
     {
-        V = g_V[i];
+        V = g_internalVprev1[i];
         Vprev1 = g_internalVprev1[i];
         Vprev2 = g_internalVprev2[i];
-        m = g_m[i]
-        n = g_n[i]
-        h = g_h[i]
+        m = g_m[i];
+        n = g_n[i];
+        h = g_h[i];
         I = g_I[i];
         spike = 0;
         E_Na = g_E_Na[i];
@@ -80,9 +81,6 @@ __global__ void update(
 
         for (int j = 0; j < nsteps; ++j)
         {
-            Vprev2 = Vprev1;
-            Vprev1 = V;
-            
             a_m = (25.0 - V) / (10.0 * (EXP((25.0 - V) / 10.0) - 1.0));
             a_n = (10.0 - V) / (100.0 * (EXP((10.0 - V) / 10.0) - 1.0));
             a_h = 0.07 * EXP(-V / 20.0);
@@ -97,14 +95,16 @@ __global__ void update(
             
             I_K = g_K * EXP(4 * LOG(n)) * (V - E_K);
             I_Na = g_Na * EXP(3 * LOG(m)) * h * (V - E_Na);
-            I_l = g_L * (V - E_L);
+            I_L = g_L * (V - E_L);
             I_channels = I_K + I_Na + I_L;
-            
+
             V = V + dt * (I - I_channels);
             
-            spike += (Vprev2 <= Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);   
+            spike += (Vprev2 <= Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);
+            
+            Vprev2 = Vprev1;
+            Vprev1 = V;
         }
-        
         g_V[i] = V;
         g_internalVprev1[i] = Vprev1;
         g_internalVprev2[i] = Vprev2;
@@ -119,6 +119,7 @@ __global__ void update(
 
 
 if __name__ == '__main__':
+    import time
     import argparse
     import itertools
     import networkx as nx
@@ -130,10 +131,11 @@ if __name__ == '__main__':
     from neurokernel.LPU.InputProcessors.FileInputProcessor import FileInputProcessor
     from neurokernel.LPU.InputProcessors.StepInputProcessor import StepInputProcessor
     from neurokernel.LPU.OutputProcessors.FileOutputProcessor import FileOutputProcessor
+    from neurokernel.LPU.OutputProcessors.OutputRecorder import OutputRecorder
 
     import neurokernel.mpi_relaunch
 
-    dt = 1e-4
+    dt = 1e-3
     dur = 1.0
     steps = int(dur/dt)
 
@@ -161,39 +163,38 @@ if __name__ == '__main__':
 
     G = nx.MultiDiGraph()
 
-    G.add_node('neuron0', **{
-               'class': 'HodgkinHuxley',
-               'name': 'HodgkinHuxley',
-               'n': 0.,
-               'm': 0.,
-               'h': 1.,
-               })
+    N = 1
+    for i in range(N):
+        G.add_node('neuron{}'.format(i), **{
+                'class': 'HodgkinHuxley2',
+                'name': 'HodgkinHuxley2',
+                'g_K': 36.0,
+                'g_Na': 120.0,
+                'g_L': 0.3,
+                'E_K': -77.0,
+                'E_Na': 50.0,
+                'E_L': -54.387,
+                'V': 0,
+                'spike': 0
+                })
 
     comp_dict, conns = LPU.graph_to_dicts(G)
 
-    fl_input_processor = StepInputProcessor('I', ['neuron0'], 40, 0.2, 0.8)
-    fl_output_processor = FileOutputProcessor([('spike_state', None),('V', None)], 'new_output.h5', sample_interval=1)
+
+    fl_input_processor = StepInputProcessor('I', ['neuron{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
+    fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'hh_test_output.h5', sample_interval=1, cache_length=2000)]
+
+    #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
 
     man.add(LPU, 'ge', dt, comp_dict, conns,
-            device=args.gpu_dev, input_processors = [fl_input_processor],
-            output_processors = [fl_output_processor], debug=args.debug)
+            device=args.gpu_dev, input_processors=[fl_input_processor],
+            output_processors=fl_output_processor, debug=args.debug,
+            print_timing = True, time_sync = False,
+            extra_comps=[])
 
     man.spawn()
     man.start(steps=args.steps)
+    start_time = time.time()
     man.wait()
-
-    # plot the result
-    import h5py
-    import matplotlib
-    matplotlib.use('PS')
-    import matplotlib.pyplot as plt
-
-    f = h5py.File('new_output.h5')
-    t = np.arange(0, args.steps)*dt
-
-    plt.figure()
-    plt.plot(t,list(f['V'].values())[0])
-    plt.xlabel('time, [s]')
-    plt.ylabel('Voltage, [mV]')
-    plt.title('Hodgkin-Huxley Neuron')
-    plt.savefig('hhn.png',dpi=300)
+    end_time = time.time()
+    print(end_time-start_time)

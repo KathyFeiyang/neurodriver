@@ -16,7 +16,7 @@ from neurokernel.LPU.OutputProcessors.OutputRecorder import OutputRecorder
 
 import neurokernel.mpi_relaunch
 
-dt = 1e-5
+dt = 1e-3
 dur = 1.0
 steps = int(dur/dt)
 
@@ -44,23 +44,23 @@ man = core.Manager()
 
 G = nx.MultiDiGraph()
 
-N = 1024
+N = 1
 for i in range(N):
     G.add_node('neuron{}'.format(i), **{
                'class': 'LeakyIAF',
                'name': 'LeakyIAF',
                'resting_potential': -70.0, # (mV)
-              'threshold': -40.0, # Firing Threshold (mV)
+              'threshold': 70.0, # Firing Threshold (mV)
               'reset_potential': -70.0, # Potential to be reset to after a spike (mV)
               'capacitance': 1, # (\mu F/cm^2)
-              'resistance': 0.007 # (k\Omega cm.^2)
+              'resistance': 1 # (k\Omega cm.^2)
                })
 
 comp_dict, conns = LPU.graph_to_dicts(G)
 
 
-fl_input_processor = StepInputProcessor('I', ['neuron{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
-fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'output.h5', sample_interval=1)]
+fl_input_processor = StepInputProcessor('I', ['neuron{}'.format(i) for i in range(N)], 100.0, 0.2, 0.8)
+fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'lif_test_output.h5', sample_interval=1)]
 
 #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
 

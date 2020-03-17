@@ -45,6 +45,7 @@ class LeakyIAF(BaseAxonHillockModel):
         # 6. all variables in internals according to the order in internals
         # 7. all variables in updates according to the order in updates
         template = """
+#include <stdio.h>
 __global__ void update(int num_comps,
                %(dt)s dt,
                int nsteps,
@@ -79,6 +80,7 @@ __global__ void update(int num_comps,
         // load the data from global memory
         spike = 0;
         V = g_internalV[i];
+        printf("V: %%f\\n", V);
         I = g_I[i];
         capacitance = g_capacitance[i];
         resting_potential = g_resting_potential[i];
@@ -94,9 +96,10 @@ __global__ void update(int num_comps,
             V = V*bh + (resistance*I+resting_potential)*(1.0 - bh);
             if (V >= threshold)
             {
-                V = reset_potential;
+                V = 10;
                 spike = 1.0;
             }
+            printf("inner loop: V = %%f, bh = %%f, I = %%f, everything = %%f\\n", V, bh, I, (resistance*I+resting_potential)*(1.0 - bh));
         }
 
         // write local updated states back to global memory
@@ -125,7 +128,7 @@ if __name__ == '__main__':
 
     import neurokernel.mpi_relaunch
 
-    dt = 1e-4
+    dt = 1e-3
     dur = 1.0
     steps = int(dur/dt)
 
@@ -168,7 +171,7 @@ if __name__ == '__main__':
 
     # use a input processor that present a step current (I) input to 'neuron0'
     # the step is from 0.2 to 0.8 and the step height is 10.0
-    fl_input_processor = StepInputProcessor('I', ['neuron0'], 10.0, 0.2, 0.8)
+    fl_input_processor = StepInputProcessor('I', ['neuron0'], 100.0, 0.2, 0.8)
     # output processor to record 'spike_state' and 'V' to hdf5 file 'new_output.h5',
     # with a sampling interval of 1 run step.
     fl_output_processor = FileOutputProcessor([('spike_state', None),('V', None)], 'new_output.h5', sample_interval=1)

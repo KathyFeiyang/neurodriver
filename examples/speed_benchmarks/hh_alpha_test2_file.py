@@ -42,7 +42,7 @@ def simulation(dt, N, output_n):
 
     #dt = 1e-3
     dur = 1.0 / 100
-    steps = int(dur/dt + 1)
+    steps = int(dur/dt)
 
     man = core.Manager()
 
@@ -97,8 +97,8 @@ def simulation(dt, N, output_n):
     comp_dict, conns = LPU.graph_to_dicts(G, remove_edge_id=False)
 
     fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
-    #fl_output_processor = [FileOutputProcessor([('V', None), ('spike_state', None), ('g', None), ('E', None)], 'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
-    fl_output_processor = [] # temporarily suppress generating output
+    fl_output_processor = [FileOutputProcessor([('V', None), ('spike_state', None), ('g', None), ('E', None)], 'neurodriver_output.h5'.format(output_n), sample_interval=1, cache_length=2000)]
+    #fl_output_processor = [] # temporarily suppress generating output
 
     #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
 
@@ -124,7 +124,7 @@ if __name__ == '__main__':
     #diff_N = [2, 32, 128, 256, 512]
     diff_dt = [1e-6] # change ddt accordingly
     diff_N = [2, 32, 128, 256, 512]
-    n_sim = 1
+    n_sim = 5
     i = 0
     for dt in diff_dt:
         for N in diff_N:

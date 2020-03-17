@@ -6,7 +6,7 @@ class AlphaSynapse(BaseSynapseModel):
     params = ['gmax', # maximum conductance (mS/cm^2)
               'ar', # rise rate of conductance (ms)
               'ad', # decay rate of conductance (ms)
-              'V_reverse'
+              'reverse' # reverse potential
               ]
     internals = OrderedDict([('z', 0.0),  # g,
                              ('dz', 0.0),  # derivative of g
@@ -18,13 +18,15 @@ class AlphaSynapse(BaseSynapseModel):
         if self.steps == 1:
             # this is a kernel that runs 1 step internally for each self.dt
             template = """
-__global__ void update(int num_comps, %(dt)s dt, int nsteps,
+__global__ void update(int num_comps, 
+                       %(dt)s dt, 
+                       int nsteps,
                        %(spike_state)s* g_spike_state,
                        %(gmax)s* g_gmax, 
                        %(ar)s* g_ar,
                        %(ad)s* g_ad,
-                       %(V_reverse)* g_V_reverse,
-                       %(z)s* g_z, 
+                       %(reverse)s* g_reverse,
+                       %(z)s* g_z,
                        %(dz)s* g_dz,
                        %(d2z)s* g_d2z, 
                        %(g)s* g_g,
@@ -38,7 +40,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     %(gmax)s gmax;
     %(ar)s ar;
     %(ad)s ad;
-    %(V_reverse)* V_reverse;
+    %(reverse)s reverse;
     %(z)s z, new_z;
     %(dz)s dz, new_dz;
     %(d2z)s d2z, new_d2z;
@@ -49,8 +51,8 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     {
         ar = g_ar[i];
         ad = g_ad[i];
-        g_max = g_gmax[i];
-        V_reverse = g_V_reverse[i];
+        gmax = g_gmax[i];
+        reverse = g_reverse[i];
         spike_state = g_spike_state[i];
         z = g_z[i];
         dz = g_dz[i];
@@ -64,12 +66,13 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
             new_dz += ar * ad;
         new_d2z = -(ar + ad) * dz - ar * ad * z;
         g = fmin(gmax, gmax * new_z);
-        
+        E = reverse;
+
         g_z[i] = new_z;
         g_dz[i] = new_dz;
         g_d2z[i] = new_d2z;  
         g_g[i] = g;
-        g_E[i] = V_reverse;
+        g_E[i] = E;
     }
 }
 """
@@ -82,7 +85,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
                        %(gmax)s* g_gmax, 
                        %(ar)s* g_ar,
                        %(ad)s* g_ad,
-                       %(V_reverse)* g_V_reverse,
+                       %(reverse)s* g_reverse,
                        %(z)s* g_z, 
                        %(dz)s* g_dz,
                        %(d2z)s* g_d2z, 
@@ -97,7 +100,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     %(gmax)s gmax;
     %(ar)s ar;
     %(ad)s ad;
-    %(V_reverse)* V_reverse;
+    %(reverse)s reverse;
     %(z)s z, new_z;
     %(dz)s dz, new_dz;
     %(d2z)s d2z, new_d2z;
@@ -108,8 +111,8 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     {
         ar = g_ar[i];
         ad = g_ad[i];
-        g_max = g_gmax[i];
-        V_reverse = g_V_reverse[i];
+        gmax = g_gmax[i];
+        reverse = g_reverse[i];
         spike_state = g_spike_state[i];
         z = g_z[i];
         dz = g_dz[i];
@@ -125,6 +128,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
                 new_dz += ar * ad;
             new_d2z = -(ar + ad) * dz - ar * ad * z;
             g = fmin(gmax, gmax * new_z);
+            E = reverse;
 
             z = new_z;
             dz = new_dz;
@@ -135,7 +139,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
         g_dz[i] = new_dz;
         g_d2z[i] = new_d2z;  
         g_g[i] = g;
-        g_E[i] = V_reverse;
+        g_E[i] = E;
     }
 }
 """

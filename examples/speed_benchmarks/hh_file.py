@@ -65,40 +65,40 @@ def simulation(dt, N, output_n):
                     'spike': 0
                     })
 
-    spk_out_id = 0
-    in_port_idx = 0
+    # spk_out_id = 0
+    # in_port_idx = 0
 
-    # Create AlphaSynapse connection between each pair of HodgkinHuxley neurons
-    for i in range(N):
-        for j in range(N):
-            if i == j:
-                continue
+    # # Create AlphaSynapse connection between each pair of HodgkinHuxley neurons
+    # for i in range(N):
+    #     for j in range(N):
+    #         if i == j:
+    #             continue
 
-            id_i = 'neuron_{}'.format(i)
-            id_j = 'neuron_{}'.format(j)
-            pair_id = id_i + '_to_' + id_j
+    #         id_i = 'neuron_{}'.format(i)
+    #         id_j = 'neuron_{}'.format(j)
+    #         pair_id = id_i + '_to_' + id_j
 
-            synapse_id = 'synapse_' + pair_id
+    #         synapse_id = 'synapse_' + pair_id
 
-            G.add_node(synapse_id,
-                    **{'class': 'AlphaSynapse',
-                        'name': pair_id,
-                        'ar': 4.0,
-                        'ad': 4.0,
-                        'reverse': 100.0,
-                        'gmax': 100.0,
-                        'g': 0.0,
-                        'E': 0.0,
-                        'circuit': 'local'})
+    #         G.add_node(synapse_id,
+    #                 **{'class': 'AlphaSynapse',
+    #                     'name': pair_id,
+    #                     'ar': 4.0,
+    #                     'ad': 4.0,
+    #                     'reverse': 100.0,
+    #                     'gmax': 100.0,
+    #                     'g': 0.0,
+    #                     'E': 0.0,
+    #                     'circuit': 'local'})
 
-            G.add_edge(id_i, synapse_id)
-            G.add_edge(synapse_id, id_j)
+    #         G.add_edge(id_i, synapse_id)
+    #         G.add_edge(synapse_id, id_j)
 
     comp_dict, conns = LPU.graph_to_dicts(G, remove_edge_id=False)
 
     fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
-    #fl_output_processor = [FileOutputProcessor([('V', None), ('spike_state', None), ('g', None), ('E', None)], 'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
-    fl_output_processor = [] # temporarily suppress generating output
+    fl_output_processor = [FileOutputProcessor([('V', None), ('spike_state', None)], 'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
+    #fl_output_processor = [] # temporarily suppress generating output
 
     #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
 
