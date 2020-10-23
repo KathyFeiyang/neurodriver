@@ -19,7 +19,7 @@ class ConnorStevens2(BaseAxonHillockModel):
                              ('internalVprev2',-65.), # Membrane Potential (mV)
                              ('n', 0), # state variable for activation of K channel ([0-1] unitless)
                              ('m', 0), # state variable for activation of Na channel ([0-1] unitless)
-                             ('h', 1), # state variable for inactivation of Na channel ([0-1] unitless)
+                             ('h', 0.92), # state variable for inactivation of Na channel ([0-1] unitless)
                              ('a', 0), # state variable for activation of A channel ([0-1] unitless)
                              ('b', 0) # state variable for inactivation of A channel ([0-1] unitless)
                             ])
