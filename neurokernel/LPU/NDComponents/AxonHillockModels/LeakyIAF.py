@@ -80,7 +80,6 @@ __global__ void update(int num_comps,
         // load the data from global memory
         spike = 0;
         V = g_internalV[i];
-        printf("V: %%f\\n", V);
         I = g_I[i];
         capacitance = g_capacitance[i];
         resting_potential = g_resting_potential[i];
@@ -99,7 +98,6 @@ __global__ void update(int num_comps,
                 V = 10;
                 spike = 1.0;
             }
-            printf("inner loop: V = %%f, bh = %%f, I = %%f, everything = %%f\\n", V, bh, I, (resistance*I+resting_potential)*(1.0 - bh));
         }
 
         // write local updated states back to global memory

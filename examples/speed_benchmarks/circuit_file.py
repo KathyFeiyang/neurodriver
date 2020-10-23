@@ -136,9 +136,9 @@ if __name__ == '__main__':
     results = []
     #diff_dt = [5e-6, 1e-5, 5e-5, 1e-4, 1e-3]
     #diff_N = [2, 32, 128, 256, 512]
-    diff_dt = [1e-6] # change ddt accordingly
-    diff_N = [2, 32, 128, 256, 512]
-    n_sim = 5
+    diff_dt = [1e-7] # remember change ddt accordingly in LPU/NDComponents/AxonHillockModels/BaseAxonHillockModel.py
+    diff_N = [2, 128, 512]
+    n_sim = 1
     i = 0
     for dt in diff_dt:
         for N in diff_N:

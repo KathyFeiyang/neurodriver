@@ -36,7 +36,7 @@ class BaseAxonHillockModel(with_metaclass(ABCMeta, NDComponent)):
         self.dtype = params_dict[self.params[0]].dtype
 
         self.dt = np.double(dt)
-        self.ddt = np.double(1e-6)
+        self.ddt = np.double(1e-7)
         self.steps = np.int32(max(int(self.dt/self.ddt), 1))
         print('DEBUG: dt={}, ddt={}'.format(self.dt, self.ddt))
         print('DEBUG: self.steps={}'.format(self.steps))

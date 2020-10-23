@@ -707,8 +707,8 @@ class LPU(Module):
             # automatically generated.
             # This can be checking if the 'pre' attribute in the item
             # in conn_list with 'variable' 'V' is the same neuron as post
-            if post == [tmp['pre'] for tmp in conn_list if tmp['variable']=='V'][0]:
-                conns.append((uid,post,{'variable':'I', 'delay': 0}))
+            #if post == [tmp['pre'] for tmp in conn_list if tmp['variable']=='E'][0]:
+            #    conns.append((uid,post,{'variable':'I', 'delay': 0}))
         if self.print_timing:
             self.log_info("Elapsed time for processing aggregator: {:.3f} seconds".format(time.time()-start))
             start = time.time()
