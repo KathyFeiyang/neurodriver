@@ -12,31 +12,33 @@ class HodgkinHuxley2(BaseAxonHillockModel):
               'E_Na',
               'E_L'
               ]
-    extra_params = ['initV',
-                    'initn',
-                    'initm',
-                    'inith']
-    internals = OrderedDict([('V',-65.),  # Membrane Potential (mV)
-                             ('Vprev1',-65.),
-                             ('n', 0.),
-                             ('m', 0.),
-                             ('h', 0.92)]) # Membrane Potential (mV)
+    internals = OrderedDict([('internalVprev1', 0.),  # Membrane Potential (mV)
+                             ('internalVprev2', -65.0),
+                             ('n', 0.5),
+                             ('m', 0.5),
+                             ('h', 0.06)])  # Membrane Potential (mV)]) 
+    # extra_params = ['initV',
+    #                 'initn',
+    #                 'initm',
+    #                 'inith']
+
     @property
     def maximum_dt_allowed(self):
-        return 1e-5
+        return 1e-3
 
-    def pre_run(self, update_pointers):
-        super(HodgkinHuxley2, self).pre_run(update_pointers)
-        self.add_initializer('initV', 'Vprev1', update_pointers)
-        self.add_initializer('initn', 'n', update_pointers)
-        self.add_initializer('initm', 'm', update_pointers)
-        self.add_initializer('inith', 'h', update_pointers)
+    # def pre_run(self, update_pointers):
+    #     super(HodgkinHuxley2, self).pre_run(update_pointers)
+    #     self.add_initializer('initV', 'Vprev1', update_pointers)
+    #     self.add_initializer('initn', 'n', update_pointers)
+    #     self.add_initializer('initm', 'm', update_pointers)
+    #     self.add_initializer('inith', 'h', update_pointers)
 
     def get_update_template(self):
         template = """
 #define EXP exp%(fletter)s
 #define POW pow%(fletter)s
 #define ABS fabs%(fletter)s
+#define LOG log%(fletter)s
 
 __global__ void update(
     int num_comps,
@@ -49,8 +51,8 @@ __global__ void update(
     %(param_E_K)s* g_E_K,
     %(param_E_Na)s* g_E_Na,
     %(param_E_L)s* g_E_L,
-    %(internal_V)s* g_internalV,
-    %(internal_Vprev1)s* g_Vprev1,
+    %(internal_internalVprev1)s* g_internalVprev1,
+    %(internal_internalVprev2)s* g_internalVprev2,
     %(internal_n)s* g_n,
     %(internal_m)s* g_m,
     %(internal_h)s* g_h,
@@ -60,11 +62,11 @@ __global__ void update(
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
+    // %(dt)s ddt = dt*1000.; // s to ms
 
-    %(update_V)s V, Vprev1, Vprev2, dV;
-    %(input_I)s I;
-    %(update_spike_state)s spike;
+    %(update_V)s V, Vprev1, Vprev2;
+    %(input_I)s I, I_K, I_Na, I_L, I_channels;
+    %(update_spike_state)s spike_state;
     %(param_g_Na)s g_Na;
     %(param_g_K)s g_K;
     %(param_g_L)s g_L;
@@ -73,64 +75,60 @@ __global__ void update(
     %(param_E_K)s E_K;
     %(param_E_L)s E_L;
 
-    %(internal_n)s n, dn;
-    %(internal_m)s m, dm;
-    %(internal_h)s h, dh;
-    %(internal_n)s a;
+    %(internal_n)s n, a_n, b_n;
+    %(internal_m)s m, a_m, b_m;
+    %(internal_h)s h, a_h, b_h;
 
     for(int i = tid; i < num_comps; i += total_threads)
     {
-        spike = 0;
-        V = g_internalV[i];
-        Vprev1 = V;
-        Vprev2 = g_Vprev1[i];
-        I = g_I[i];
-        n = g_n[i];
+        V = g_internalVprev1[i];
+        Vprev1 = g_internalVprev1[i];
+        Vprev2 = g_internalVprev2[i];
         m = g_m[i];
+        n = g_n[i];
         h = g_h[i];
-        g_Na = g_g_Na[i];
-        g_K = g_g_K[i];
-        g_L = g_g_L[i];
+        I = g_I[i];
+        spike_state = 0;
         E_Na = g_E_Na[i];
         E_K = g_E_K[i];
         E_L = g_E_L[i];
+        g_Na = g_g_Na[i];
+        g_K = g_g_K[i];
+        g_L = g_g_L[i];
 
         for (int j = 0; j < nsteps; ++j)
         {
-            a = exp(-(V+55)/10)-1;
-            if (ABS(a) <= 1e-7)
-                dn = (1.-n) * 0.1 - n * (0.125*EXP(-(V+65.)/80.));
-            else
-                dn = (1.-n) * (-0.01*(V+55.)/a) - n * (0.125*EXP(-(V+65)/80));
+            a_m = (25.0 - V) / (10.0 * (EXP((25.0 - V) / 10.0) - 1.0));
+            a_n = (10.0 - V) / (100.0 * (EXP((10.0 - V) / 10.0) - 1.0));
+            a_h = 0.07 * EXP(-V / 20.0);
 
-            a = exp(-(V+40.)/10.)-1.;
-            if (ABS(a) <= 1e-7)
-                dm = (1.-m) - m*(4*EXP(-(V+65)/18));
-            else
-                dm = (1.-m) * (-0.1*(V+40.)/a) - m * (4.*EXP(-(V+65.)/18.));
+            b_m = 4.0 * EXP(-1.0 * V / 18.0);
+            b_n = 0.125 * EXP(-1.0 * V / 80.0);
+            b_h = 1.0 / (EXP((30.0 - V) / 10.0) + 1.0);
+            
+            m = m + dt * (a_m * (1.0 - m) - b_m * m);
+            n = n + dt * (a_n * (1.0 - n) - b_n * n);
+            h = h + dt * (a_h * (1.0 - h) - b_h * h);
+            
+            I_K = g_K * EXP(4 * LOG(n)) * (V - E_K);
+            I_Na = g_Na * EXP(3 * LOG(m)) * h * (V - E_Na);
+            I_L = g_L * (V - E_L);
+            I_channels = I_K + I_Na + I_L;
 
-            dh = (1.-h) * (0.07*EXP(-(V+65.)/20.)) - h / (EXP(-(V+35.)/10.)+1.);
-
-            dV = I - g_Na*POW(m,3)*h*(V-E_Na) - g_K * POW(n,4) * (V-E_K) - g_L * (V-E_L);
-
-            n += ddt * dn;
-            m += ddt * dm;
-            h += ddt * dh;
-            V += ddt * dV;
-
-            spike += (Vprev2<=Vprev1) && (Vprev1 >= V) && (Vprev1 > -30);
-
+            V = V + dt * (I - I_channels);
+            
+            spike_state += (Vprev2 <= Vprev1) && (Vprev1 >= V) && (V > -30);
+            
             Vprev2 = Vprev1;
             Vprev1 = V;
         }
-
-        g_n[i] = n;
-        g_m[i] = m;
-        g_h[i] = h;
         g_V[i] = V;
-        g_internalV[i] = Vprev1;
-        g_Vprev1[i] = Vprev2;
-        g_spike_state[i] = (spike > 0);
+        g_internalVprev1[i] = Vprev1;
+        g_internalVprev2[i] = Vprev2;
+        g_m[i] = m;
+        g_n[i] = n;
+        g_h[i] = h;
+        g_spike_state[i] = (spike_state > 0);       
     }
 }
 """
@@ -152,8 +150,8 @@ if __name__ == '__main__':
 
     import neurokernel.mpi_relaunch
 
-    dt = 1e-4
-    dur = 1.0
+    dt = 1e-6
+    dur = 1e-5
     steps = int(dur/dt)
 
     parser = argparse.ArgumentParser()
@@ -189,12 +187,14 @@ if __name__ == '__main__':
                'E_K': -77.0,
                'E_Na': 50.0,
                'E_L': -54.387,
+               'spike_state': 0,
+               'V': 0
                })
 
     comp_dict, conns = LPU.graph_to_dicts(G)
 
-    fl_input_processor = StepInputProcessor('I', ['neuron0'], 40, 0.2, 0.8)
-    fl_output_processor = FileOutputProcessor([('spike_state', None),('V', None)], 'new_output.h5', sample_interval=1)
+    fl_input_processor = StepInputProcessor('I', ['neuron0'], 20, 0, 1e-5)
+    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None)], 'new_output.h5', sample_interval=1)
 
     man.add(LPU, 'ge', dt, comp_dict, conns,
             device=args.gpu_dev, input_processors = [fl_input_processor],
@@ -206,16 +206,20 @@ if __name__ == '__main__':
 
     # plot the result
     import h5py
-    import matplotlib
-    matplotlib.use('PS')
-    import matplotlib.pyplot as plt
+    # import matplotlib
+    # matplotlib.use('PS')
+    # import matplotlib.pyplot as plt
 
     f = h5py.File('new_output.h5')
     t = np.arange(0, args.steps)*dt
+    print(f.keys())
+    print(np.array(list(f['V'].values())[0]))
+    # print(np.array(list(f['V'].values())[1]))
+    print(np.array(list(f['spike_state'].values())[0]))
 
-    plt.figure()
-    plt.plot(t,list(f['V'].values())[0])
-    plt.xlabel('time, [s]')
-    plt.ylabel('Voltage, [mV]')
-    plt.title('Hodgkin-Huxley Neuron')
-    plt.savefig('hhn.png',dpi=300)
+    # plt.figure()
+    # plt.plot(t,list(f['V'].values())[0])
+    # plt.xlabel('time, [s]')
+    # plt.ylabel('Voltage, [mV]')
+    # plt.title('Hodgkin-Huxley Neuron')
+    # plt.savefig('hhn.png',dpi=300)

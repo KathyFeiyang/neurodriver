@@ -14,7 +14,7 @@ class AlphaSynapse(BaseSynapseModel):
 
     @property
     def maximum_dt_allowed(self):
-        return 1e-4
+        return 1e-3
 
     def get_update_template(self):
         # The following kernel assumes a maximum of one input connection
@@ -32,7 +32,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
+    // %(dt)s ddt = dt*1000.; // s to ms
     %(input_spike_state)s spike_state;
     %(param_gmax)s gmax;
     %(param_ar)s ar;
@@ -50,17 +50,17 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
         d2z = g_d2z[i];
         spike_state = g_spike_state[i];
 
-        new_z = fmax( 0., z + ddt*dz );
-        new_dz = dz + ddt*d2z;
-        if( spike_state>0.0 )
-            new_dz += ar*ad;
-        new_d2z = -( ar+ad )*dz - ar*ad*z;
+        new_z = 0. > z + dt * dz ? 0. : z + dt * dz;
+        new_dz = dz + dt * d2z;
+        if(spike_state > 0.0)
+            new_dz += ar * ad;
+        new_d2z = -(ar + ad) * dz - ar * ad * z;
 
         gmax = g_gmax[i];
         g_z[i] = new_z;
         g_dz[i] = new_dz;
         g_d2z[i] = new_d2z;
-        g_g[i] = new_z*gmax;
+        g_g[i] = gmax > new_z * gmax ? new_z * gmax : gmax;
     }
 }
 """
@@ -78,7 +78,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
     int tid = threadIdx.x + blockIdx.x * blockDim.x;
     int total_threads = gridDim.x * blockDim.x;
 
-    %(dt)s ddt = dt*1000.; // s to ms
+    // %(dt)s ddt = dt*1000.; // s to ms
     %(input_spike_state)s spike_state;
     %(param_gmax)s gmax;
     %(param_ar)s ar;
@@ -98,8 +98,8 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
 
         for(int k = 0; k < nsteps; ++k)
         {
-            new_z = fmax( 0., z + ddt*dz );
-            new_dz = dz + ddt*d2z;
+            new_z = fmax( 0., z + dt*dz );
+            new_dz = dz + dt*d2z;
             if(k == 0 && (spike_state>0.0))
                 new_dz += ar*ad;
             new_d2z = -( ar+ad )*dz - ar*ad*z;
@@ -113,7 +113,7 @@ __global__ void update(int num_comps, %(dt)s dt, int nsteps,
         g_z[i] = new_z;
         g_dz[i] = new_dz;
         g_d2z[i] = new_d2z;
-        g_g[i] = new_z*gmax;
+        g_g[i] = gmax > new_z * gmax ? new_z * gmax : gmax;
     }
 }
 """
@@ -133,8 +133,8 @@ if __name__ == '__main__':
     from neurokernel.LPU.OutputProcessors.FileOutputProcessor import FileOutputProcessor
     import neurokernel.mpi_relaunch
 
-    dt = 1e-4
-    dur = 1.0
+    dt = 1e-6
+    dur = 1e-5
     steps = int(dur / dt)
 
     parser = argparse.ArgumentParser()
@@ -162,7 +162,8 @@ if __name__ == '__main__':
     uids = np.array(["synapse0"], dtype='S')
 
     spike_state = np.zeros((steps, 1), dtype=np.float64)
-    spike_state[np.nonzero((t - np.round(t / 0.04) * 0.04) == 0)[0]] = 1
+    # spike_state[np.nonzero((t - np.round(t / 0.04) * 0.04) == 0)[0]] = 1
+    spike_state[:,:] = 1
 
     with h5py.File('input_spike.h5', 'w') as f:
         f.create_dataset('spike_state/uids', data=uids)
@@ -177,10 +178,10 @@ if __name__ == '__main__':
     G.add_node('synapse0', **{
                'class': 'AlphaSynapse',
                'name': 'AlphaSynapse',
-               'gmax': 0.003,
-               'ar': 0.11,
-               'ad': 0.19,
-               'reverse': 0.0
+               'gmax': 100.0,
+               'ar': 4.0,
+               'ad': 4.0,
+               'reverse': 100.0
                })
 
     comp_dict, conns = LPU.graph_to_dicts(G)
@@ -196,3 +197,8 @@ if __name__ == '__main__':
     man.spawn()
     man.start(steps=args.steps)
     man.wait()
+
+    import h5py
+    f = h5py.File('new_output.h5')
+    print(f.keys())
+    print(np.array(list(f['g'].values())[0]))
