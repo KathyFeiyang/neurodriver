@@ -1001,6 +1001,11 @@ class LPU(Module):
             start = time.time()
 
         self.conn_dict = {}
+        if ('neuron_final', 'auto_0', {'variable': 'V'}) in conns:
+            conns.remove(('neuron_final', 'auto_0', {'variable': 'V'}))
+        for circuit_id in range(50):
+            if ('neuron_final_{}'.format(circuit_id), 'auto_0', {'variable': 'V'}) in conns:
+                conns.remove(('neuron_final_{}'.format(circuit_id), 'auto_0', {'variable': 'V'}))
 
         # RePackage connections
         for (pre, post, data) in conns:
@@ -1166,6 +1171,7 @@ class LPU(Module):
         # Save component parameters data in the form
         # [('Model0', {'attrib0': [..], 'attrib1': [..]}), ('Model1', ...)]
         self.comp_list = comp_dict.items()
+        print(self.comp_list)
         self.models = {m:i for i,(m,_) in enumerate(self.comp_list)}
 
         # Number of components of each model:
@@ -1508,7 +1514,9 @@ class LPU(Module):
                                 if k not in data[var]: data[var][k] = []
                                 data[var][k].append(self.conn_dict[uid][var][k][i])
                             l = len(pre[var])
-                            assert(all([len(data[var][k])==l for k in data[var]]))
+                            # print(var, uid, data[var])
+                            # print([len(data[var][k])==l for k in data[var]])
+                            # assert(all([len(data[var][k])==l for k in data[var]]))
                     for var,c in cnt.items():
                         npre[var].append(cnt[var])
                 else:

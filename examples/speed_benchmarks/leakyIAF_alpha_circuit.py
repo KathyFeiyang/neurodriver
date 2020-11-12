@@ -44,31 +44,29 @@ def create_graph(N):
 
     final_neuron_id = "neuron_final"
     G.add_node(final_neuron_id,
-            **{'class': 'HodgkinHuxley2',
-                'name': 'HodgkinHuxley2',
-                'g_K': 36.0,
-                'g_Na': 120.0,
-                'g_L': 0.3,
-                'E_K': -12.0,
-                'E_Na': 115.0,
-                'E_L': 10.6,
+            **{'class': 'LeakyIAF',
+                'name': 'LeakyIAF',
+                'resting_potential': -70.0,
+                'reset_potential': -70.0,
+                'threshold': -45.0, #
+                'capacitance': 5.0, # in mS
+                'resistance': 10.0, # in Ohm
                 'V': 0.0,
-                'spike_state': 0,
+                'spike': 0,
                 })
-    # Create N HodgkinHuxley2 neurons and N AlphaSynapse connections
+    # Create N LeakyIAF neurons and N AlphaSynapse connections
     for i in range(N):
         neuron_id = 'neuron_{}'.format(i)
         G.add_node(neuron_id,
-                **{'class': 'HodgkinHuxley2',
-                    'name': 'HodgkinHuxley2',
-                    'g_K': 36.0,
-                    'g_Na': 120.0,
-                    'g_L': 0.3,
-                    'E_K': -12.0,
-                    'E_Na': 115.0,
-                    'E_L': 10.6,
+                **{'class': 'LeakyIAF',
+                    'name': 'LeakyIAF',
+                    'resting_potential': -70.0,
+                    'reset_potential': -70.0,
+                    'threshold': -45.0, #
+                    'capacitance': 5.0, # in mS
+                    'resistance': 10.0, # in Ohm
                     'V': 0.0,
-                    'spike_state': 0,
+                    'spike': 0,
                     })
 
         synapse_id = 'synapse_{}'.format(i)
@@ -98,10 +96,10 @@ def simulation(dt, N, output_n):
     compile_start_time = time.time()
     #comp_dict, conns = LPU.graph_to_dicts(G, remove_edge_id=False)
 
-    fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 100.0, 0.0, dur)
+    fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
     # fl_output_processor = [FileOutputProcessor([('V', None), ('g', ['synapse_neuron_{}_to_neuron_1'.format(i) for i in range(N)])],# ('spike_state', None), ('g', None), ('E', None)],
     #                                           'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
-    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'hh_as.h5', sample_interval=1)
+    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'iaf_as.h5', sample_interval=1)
     # fl_output_processor = [] # temporarily suppress generating output
 
     #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None), ('g', None), ('E', None)], dur, dt, sample_interval = 1)]
@@ -151,7 +149,7 @@ if __name__ == '__main__':
     print("==========================================")
 
     import h5py
-    f = h5py.File('hh_as_neurodriver.h5')
+    f = h5py.File('iaf_as.h5')
     print(f.keys())
     print(np.array(list(f['V'].values())[0]))
     print(np.array(list(f['g'].values())[0]))

@@ -41,24 +41,9 @@ print('Logging in file {}'.format(file_name))
 
 def create_graph(N):
     G = nx.MultiDiGraph()
-
-    final_neuron_id = "neuron_final"
-    G.add_node(final_neuron_id,
-            **{'class': 'HodgkinHuxley2',
-                'name': 'HodgkinHuxley2',
-                'g_K': 36.0,
-                'g_Na': 120.0,
-                'g_L': 0.3,
-                'E_K': -12.0,
-                'E_Na': 115.0,
-                'E_L': 10.6,
-                'V': 0.0,
-                'spike_state': 0,
-                })
-    # Create N HodgkinHuxley2 neurons and N AlphaSynapse connections
-    for i in range(N):
-        neuron_id = 'neuron_{}'.format(i)
-        G.add_node(neuron_id,
+    for circuit_id in range(50):
+        final_neuron_id = "neuron_final_{}".format(circuit_id)
+        G.add_node(final_neuron_id,
                 **{'class': 'HodgkinHuxley2',
                     'name': 'HodgkinHuxley2',
                     'g_K': 36.0,
@@ -70,18 +55,33 @@ def create_graph(N):
                     'V': 0.0,
                     'spike_state': 0,
                     })
+        # Create N HodgkinHuxley2 neurons and N AlphaSynapse connections
+        for i in range(N):
+            neuron_id = 'neuron_{}_{}'.format(i, circuit_id)
+            G.add_node(neuron_id,
+                    **{'class': 'HodgkinHuxley2',
+                        'name': 'HodgkinHuxley2',
+                        'g_K': 36.0,
+                        'g_Na': 120.0,
+                        'g_L': 0.3,
+                        'E_K': -12.0,
+                        'E_Na': 115.0,
+                        'E_L': 10.6,
+                        'V': 0.0,
+                        'spike_state': 0,
+                        })
 
-        synapse_id = 'synapse_{}'.format(i)
-        G.add_node(synapse_id,
-                **{'class': 'AlphaSynapse',
-                    'name': 'AlphaSynapse',
-                    'gmax': 10.0,
-                    'ar': 4.0,
-                    'ad': 4.0,
-                    'reverse': 100.0})
+            synapse_id = 'synapse_{}_{}'.format(i, circuit_id)
+            G.add_node(synapse_id,
+                    **{'class': 'AlphaSynapse',
+                        'name': 'AlphaSynapse',
+                        'gmax': 10.0,
+                        'ar': 4.0,
+                        'ad': 4.0,
+                        'reverse': 100.0})
 
-        G.add_edge(neuron_id, synapse_id)
-        G.add_edge(synapse_id, final_neuron_id)
+            G.add_edge(neuron_id, synapse_id)
+            G.add_edge(synapse_id, final_neuron_id)
 
     return G
 
@@ -98,10 +98,15 @@ def simulation(dt, N, output_n):
     compile_start_time = time.time()
     #comp_dict, conns = LPU.graph_to_dicts(G, remove_edge_id=False)
 
-    fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 100.0, 0.0, dur)
+    neurons_list = []
+    for circuit_id in range(50):
+        for i in range(N):
+            neurons_list.append('neuron_{}_{}'.format(i, circuit_id))
+    print(neurons_list)
+    fl_input_processor = StepInputProcessor('I', neurons_list, 100.0, 0.0, dur)
     # fl_output_processor = [FileOutputProcessor([('V', None), ('g', ['synapse_neuron_{}_to_neuron_1'.format(i) for i in range(N)])],# ('spike_state', None), ('g', None), ('E', None)],
     #                                           'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
-    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'hh_as.h5', sample_interval=1)
+    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'hh_as_50_neurodriver.h5', sample_interval=1)
     # fl_output_processor = [] # temporarily suppress generating output
 
     #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None), ('g', None), ('E', None)], dur, dt, sample_interval = 1)]
@@ -151,7 +156,7 @@ if __name__ == '__main__':
     print("==========================================")
 
     import h5py
-    f = h5py.File('hh_as_neurodriver.h5')
+    f = h5py.File('hh_as_50_neurodriver.h5')
     print(f.keys())
     print(np.array(list(f['V'].values())[0]))
     print(np.array(list(f['g'].values())[0]))

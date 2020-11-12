@@ -18,11 +18,11 @@ class LeakyIAF(BaseAxonHillockModel):
     extra_params = ['initV']
     # internals are the variables used to store internal states of the model,
     # and are ordered dict whose keys are the variables and value are the initial values.
-    internals = OrderedDict([('V', 0.0)]) # Membrane Potential (mV)
+    internals = OrderedDict([('internalV', 0.0)]) # Membrane Potential (mV)
 
     @property
     def maximum_dt_allowed(self):
-        return 1e-4
+        return 1e-3
 
     def pre_run(self, update_pointers):
         super(LeakyIAF, self).pre_run(update_pointers)
@@ -49,7 +49,7 @@ __global__ void update(int num_comps,
                %(param_reset_potential)s* g_reset_potential,
                %(param_capacitance)s* g_capacitance,
                %(param_resistance)s* g_resistance,
-               %(internal_V)s* g_internalV, // internals
+               %(internal_internalV)s* g_internalV, // internals
                %(update_spike_state)s* g_spike_state, //updates
                %(update_V)s* g_V)
 {
@@ -57,10 +57,10 @@ __global__ void update(int num_comps,
     int total_threads = gridDim.x * blockDim.x;
 
     // instantiate variables
-    %(dt)s ddt = dt*1000.; // s to ms
+    // %(dt)s ddt = dt*1000.; // s to ms
     %(update_V)s V;
     %(input_I)s I;
-    %(update_spike_state)s spike;
+    %(update_spike_state)s spike_state;
     %(param_resting_potential)s resting_potential;
     %(param_threshold)s threshold;
     %(param_reset_potential)s reset_potential;
@@ -72,7 +72,7 @@ __global__ void update(int num_comps,
     for(int i = tid; i < num_comps; i += total_threads)
     {
         // load the data from global memory
-        spike = 0;
+        spike_state = 0;
         V = g_internalV[i];
         I = g_I[i];
         capacitance = g_capacitance[i];
@@ -82,7 +82,7 @@ __global__ void update(int num_comps,
         reset_potential = g_reset_potential[i];
 
         // update according to equations of the model
-        bh = exp%(fletter)s(-ddt/(capacitance*resistance));
+        bh = exp%(fletter)s(-dt/(capacitance*resistance));
 
         for (int j = 0; j < nsteps; ++j)
         {
@@ -90,14 +90,14 @@ __global__ void update(int num_comps,
             if (V >= threshold)
             {
                 V = reset_potential;
-                spike = 1.0;
+                spike_state = 1;
             }
         }
 
         // write local updated states back to global memory
         g_V[i] = V;
         g_internalV[i] = V;
-        g_spike_state[i] = spike;
+        g_spike_state[i] = spike_state;
     }
 }
         """

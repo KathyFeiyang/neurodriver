@@ -73,12 +73,17 @@ def create_graph(N):
 
         synapse_id = 'synapse_{}'.format(i)
         G.add_node(synapse_id,
-                **{'class': 'AlphaSynapse',
-                    'name': 'AlphaSynapse',
-                    'gmax': 10.0,
-                    'ar': 4.0,
-                    'ad': 4.0,
-                    'reverse': 100.0})
+                **{'class': 'GABA_B',
+                    'name': 'GABA_B',
+                    'gmax': 1e7,
+                    'n': 4,
+                    'gamma': 1.0,
+                    'alpha_1': 5,
+                    'alpha_2': 0.018,
+                    'beta_1': 0.12,
+                    'beta_2': 0.034,
+                    'reverse': 100.0
+                    })
 
         G.add_edge(neuron_id, synapse_id)
         G.add_edge(synapse_id, final_neuron_id)
@@ -101,7 +106,7 @@ def simulation(dt, N, output_n):
     fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 100.0, 0.0, dur)
     # fl_output_processor = [FileOutputProcessor([('V', None), ('g', ['synapse_neuron_{}_to_neuron_1'.format(i) for i in range(N)])],# ('spike_state', None), ('g', None), ('E', None)],
     #                                           'neurodriver_output_{}.h5'.format(output_n), sample_interval=1, cache_length=2000)]
-    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'hh_as.h5', sample_interval=1)
+    fl_output_processor = FileOutputProcessor([('spike_state', None), ('V', None), ('g', None)], 'hh_gaba-b_neurodriver.h5', sample_interval=1)
     # fl_output_processor = [] # temporarily suppress generating output
 
     #fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None), ('g', None), ('E', None)], dur, dt, sample_interval = 1)]
@@ -151,7 +156,7 @@ if __name__ == '__main__':
     print("==========================================")
 
     import h5py
-    f = h5py.File('hh_as_neurodriver.h5')
+    f = h5py.File('hh_gaba-b_neurodriver.h5')
     print(f.keys())
     print(np.array(list(f['V'].values())[0]))
     print(np.array(list(f['g'].values())[0]))

@@ -118,7 +118,7 @@ if __name__ == '__main__':
                      # but no need to store result for every 1e-6 second.
                      # Also couple with sample_interval in FileOutputProcessor
                      # to further reduce the storage.
-    diff_N = [2, 32, 128, 256, 512]
+    diff_N = [1]
     n_sim = 1
     i = 0
     for dt in diff_dt:
@@ -126,7 +126,7 @@ if __name__ == '__main__':
             sim_time.append([])
             compile_and_sim_time.append([])
             for t in range(n_sim + 1):
-                c, s = simulation(dt, N, i * n_sim + t, 10000)
+                c, s = simulation(dt, N, i * n_sim + t, 10)
                 sim_time[i].append(s)
                 compile_and_sim_time[i].append(c)
             sim_time[i].pop(0) # discard first result
@@ -141,3 +141,14 @@ if __name__ == '__main__':
     print("Simulation results:\n", sim_time, "\n", sim_averages)
     print("Compilation and Simulation results:\n", compile_and_sim_time, "\n", compile_and_sim_averages)
     print("==========================================")
+
+    import h5py
+    output = "neurodriver_output_0.h5"
+
+    with h5py.File(output, "r") as f:
+        # List all groups
+        print("Keys: %s" % f.keys())
+        a_group_key = list(f.keys())[0]
+
+        # Get the data
+        data = list(f[a_group_key])
