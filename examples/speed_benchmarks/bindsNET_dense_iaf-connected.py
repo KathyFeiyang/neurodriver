@@ -6,18 +6,20 @@ import networkx as nx
 import pycuda.driver as cuda
 from neurokernel.tools.logging import setup_logger
 import neurokernel.core_gpu as core
+import numpy as np
 
 from neurokernel.LPU.LPU import LPU
 
 from neurokernel.LPU.InputProcessors.FileInputProcessor import FileInputProcessor
 from neurokernel.LPU.InputProcessors.StepInputProcessor import StepInputProcessor
+from neurokernel.LPU.InputProcessors.ArrayInputProcessor import ArrayInputProcessor
 from neurokernel.LPU.OutputProcessors.FileOutputProcessor import FileOutputProcessor
 from neurokernel.LPU.OutputProcessors.OutputRecorder import OutputRecorder
 
 import neurokernel.mpi_relaunch
 
 dt = 1e-4
-dur = 50
+dur = 5
 steps = int(dur/dt)
 
 parser = argparse.ArgumentParser()
@@ -73,10 +75,18 @@ for i in range(N):
 comp_dict, conns = LPU.graph_to_dicts(G)
 
 
-fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
-fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'output.h5', sample_interval=1)]
-
-#fl_output_processor = [OutputRecorder([('spike_state', None), ('V', None)], dur, dt, sample_interval = 1)]
+dense_input = np.random.rand(250000, 1024)
+fl_input_processor = ArrayInputProcessor(
+    {'I':
+        {'uids': ['neuron_{}'.format(i) for i in range(N)],
+         'data': dense_input
+        }
+    })
+fl_output_processor = [OutputRecorder([('spike_state', ['neuron_{}'.format(i) for i in range(N)]),
+                                       ('V', ['neuron_{}'.format(i) for i in range(N)])],
+                                       sample_interval=1)]
+# fl_input_processor = StepInputProcessor('I', ['neuron_{}'.format(i) for i in range(N)], 20.0, 0.0, dur)
+# fl_output_processor = [FileOutputProcessor([('spike_state', None), ('V', None)], 'output.h5', sample_interval=1)]
 
 man.add(LPU, 'ge', dt, comp_dict, conns,
         device=args.gpu_dev, input_processors=[fl_input_processor],
